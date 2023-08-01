@@ -60,16 +60,54 @@ func (p *PSPublisher) ServeTCP(conn net.Conn) {
 	tcpAddr := zap.String("tcp", conn.LocalAddr().String())
 	p.Info("start receive ps stream from", tcpAddr)
 	defer p.Info("stop receive ps stream from", tcpAddr)
+
+	var rtpVer uint8
+	var rtpPT uint8
+	var rtpSSRC uint32
 	for err == nil {
-		if _, err = io.ReadFull(conn, p.dumpLen[:2]); err != nil {
+		headBuf := make([]byte, 14)
+		if _, err = io.ReadFull(conn, headBuf); err != nil {
 			return
 		}
+		curVer, curPT, curSSRC := p.getRTPHeadInfo(headBuf[2:])
+		if rtpSSRC == 0 {
+			rtpVer = curVer
+			rtpPT = curPT
+			rtpSSRC = curSSRC
+		} else {
+			for curVer != rtpVer || curPT != rtpPT || curSSRC != rtpSSRC {
+				newByte := make([]byte, 1)
+				if _, err = io.ReadFull(conn, newByte); err != nil {
+					return
+				}
+				headBuf = headBuf[1:]
+				headBuf = append(headBuf, newByte...)
+				curVer, curPT, curSSRC = p.getRTPHeadInfo(headBuf[2:])
+			}
+		}
+		copy(p.dumpLen, headBuf[0:2])
 		ps.Relloc(int(binary.BigEndian.Uint16(p.dumpLen[:2])))
-		if _, err = io.ReadFull(conn, ps); err != nil {
+		copy(ps, headBuf[2:])
+		if _, err = io.ReadFull(conn, ps[12:]); err != nil {
 			return
 		}
 		p.PushPS(ps)
 	}
+}
+
+const (
+	versionShift = 6
+	versionMask  = 0x3
+	ptMask       = 0x7F
+	ssrcOffset   = 8
+	ssrcLength   = 4
+)
+
+func (c *PSPublisher) getRTPHeadInfo(head []byte) (ver uint8, pt uint8, ssrc uint32) {
+	ver = head[0] >> versionShift & versionMask
+	pt = head[1] & ptMask
+	ssrc = binary.BigEndian.Uint32(head[ssrcOffset : ssrcOffset+ssrcLength])
+	return
 }
 
 func (p *PSPublisher) ServeUDP(conn *net.UDPConn) {
@@ -97,11 +135,12 @@ func (p *PSPublisher) PushPS(ps util.Buffer) {
 	}
 	p.pushPS()
 }
-func (p *PSPublisher) pushRelay(){
+func (p *PSPublisher) pushRelay() {
 	item := p.pool.Get(len(p.Packet.Payload))
 	copy(item.Value, p.Packet.Payload)
 	p.relayTrack.Push(item)
 }
+
 // 解析rtp封装 https://www.ietf.org/rfc/rfc2250.txt
 func (p *PSPublisher) pushPS() {
 	if p.Stream == nil {
