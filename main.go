@@ -72,11 +72,24 @@ func (c *PSConfig) ServeTCP(conn net.Conn) {
 		defer puber.Stop()
 		for err == nil {
 			puber.PushPS(ps)
-			if _, err = io.ReadFull(conn, rtpLen); err != nil {
+			headBuf := make([]byte, 14)
+			if _, err = io.ReadFull(conn, headBuf); err != nil {
 				return
 			}
-			ps.Relloc(int(binary.BigEndian.Uint16(rtpLen)))
-			if _, err = io.ReadFull(conn, ps); err != nil {
+			curVer, curPT, curSSRC := puber.getRTPHeadInfo(headBuf[2:])
+			for curVer != rtpPacket.Version || curPT != rtpPacket.PayloadType || curSSRC != rtpPacket.SSRC {
+				newByte := make([]byte, 1)
+				if _, err = io.ReadFull(conn, newByte); err != nil {
+					return
+				}
+				headBuf = headBuf[1:]
+				headBuf = append(headBuf, newByte...)
+				curVer, curPT, curSSRC = puber.getRTPHeadInfo(headBuf[2:])
+			}
+
+			ps.Relloc(int(binary.BigEndian.Uint16(headBuf[:2])))
+			copy(ps, headBuf[2:])
+			if _, err = io.ReadFull(conn, ps[12:]); err != nil {
 				return
 			}
 		}
