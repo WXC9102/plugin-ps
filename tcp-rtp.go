@@ -15,52 +15,46 @@ type TCPRTP struct {
 
 func (t *TCPRTP) Start(onRTP func(util.Buffer) error) (err error) {
 	reader := bufio.NewReader(t.Conn)
-	rtpLenBuf := make([]byte, 4)
 	buffer := make(util.Buffer, 1024)
+	var rtpVer uint8
+	var rtpPT uint8
+	var rtpSSRC uint32
 	for err == nil {
-		if _, err = io.ReadFull(reader, rtpLenBuf); err != nil {
+		headBuf := make([]byte, 14)
+		if _, err = io.ReadFull(reader, headBuf); err != nil {
 			return
 		}
-		rtpLen := int(binary.BigEndian.Uint16(rtpLenBuf[:2]))
-		if rtpLenBuf[2]>>6 != 2 || rtpLenBuf[2]&0x0f > 15 || rtpLenBuf[3]&0x7f > 127 {
-			buffer.Write(rtpLenBuf)
-			for i := 12; i < buffer.Len()-2; i++ {
-				if buffer[i]>>6 != 2 || buffer[i]&0x0f > 15 || buffer[i+1]&0x7f > 127 {
-					continue
-				}
-				rtpLen = int(binary.BigEndian.Uint16(buffer[i-2 : i]))
-				if buffer.Len() < rtpLen {
-					copy(buffer, buffer[i:])
-					if _, err = io.ReadFull(reader, buffer[buffer.Len():]); err != nil {
-						return
-					}
-					err = onRTP(buffer)
-					break
-				} else {
-					err = onRTP(buffer.SubBuf(i, rtpLen))
-					if err != nil {
-						return
-					}
-					i += rtpLen
-					if buffer.Len() > i+1 {
-						i += 2
-					} else if buffer.Len() > i {
-						reader.UnreadByte()
-						break
-					} else {
-						break
-					}
-					i--
-				}
-			}
+		curVer, curPT, curSSRC := getRTPHeadInfo(headBuf[2:])
+		if rtpSSRC == 0 {
+			rtpVer = curVer
+			rtpPT = curPT
+			rtpSSRC = curSSRC
 		} else {
-			buffer.Relloc(rtpLen)
-			copy(buffer, rtpLenBuf[2:])
-			if _, err = io.ReadFull(reader, buffer[2:]); err != nil {
-				return
+			for curVer != rtpVer || curPT != rtpPT || curSSRC != rtpSSRC {
+				newByte := make([]byte, 1)
+				if _, err = io.ReadFull(reader, newByte); err != nil {
+					return
+				}
+				headBuf = headBuf[1:]
+				headBuf = append(headBuf, newByte...)
+				curVer, curPT, curSSRC = getRTPHeadInfo(headBuf[2:])
 			}
-			err = onRTP(buffer)
 		}
+
+		buffer.Relloc(int(binary.BigEndian.Uint16(headBuf[0:2])))
+		copy(buffer, headBuf[2:])
+		if _, err = io.ReadFull(reader, buffer[12:]); err != nil {
+			return
+		}
+
+		err = onRTP(buffer)
 	}
+	return
+}
+
+func getRTPHeadInfo(head []byte) (ver uint8, pt uint8, ssrc uint32) {
+	ver = head[0] >> 6 & 0x3
+	pt = head[1] & 0x7F
+	ssrc = binary.BigEndian.Uint32(head[8:12])
 	return
 }
