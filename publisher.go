@@ -3,6 +3,7 @@ package ps
 import (
 	"net"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/pion/rtp"
@@ -101,6 +102,11 @@ func (p *PSPublisher) pushPS() {
 	if p.Stream == nil {
 		return
 	}
+	defer func() {
+		if err := recover(); err != nil {
+			p.Debug("panic", zap.String("PSStream", p.Stream.Path), zap.ByteString("stack", debug.Stack()))
+		}
+	}()
 	if p.pool == nil {
 		// p.PSDemuxer = mpegps.NewPSDemuxer()
 		// p.PSDemuxer.OnPacket = p.OnPacket
