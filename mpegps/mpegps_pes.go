@@ -4,9 +4,10 @@ import (
 	"io"
 )
 
-func (es *MpegPsEsStream) parsePESPacket(payload []byte) (result *MpegPsEsStream, err error) {
+func (es *MpegPsEsStream) parsePESPacket(payload []byte) (result MpegPsEsStream, err error) {
 	if len(payload) < 4 {
-		return nil, io.ErrShortBuffer
+		err = io.ErrShortBuffer
+		return
 	}
 	//data_alignment_indicator := (payload[0]&0b0001_0000)>>4 == 1
 	flag := payload[1]
@@ -14,7 +15,8 @@ func (es *MpegPsEsStream) parsePESPacket(payload []byte) (result *MpegPsEsStream
 	dtsFlag := (flag&0b0100_0000)>>6 == 1
 	pesHeaderDataLen := payload[2]
 	if len(payload) < int(pesHeaderDataLen) {
-		return nil, io.ErrShortBuffer
+		err = io.ErrShortBuffer
+		return
 	}
 	payload = payload[3:]
 	extraData := payload[:pesHeaderDataLen]
@@ -31,21 +33,19 @@ func (es *MpegPsEsStream) parsePESPacket(payload []byte) (result *MpegPsEsStream
 			dts |= uint32(extraData[7]&0b1111_1110) << 14
 			dts |= uint32(extraData[8]) << 7
 			dts |= uint32(extraData[9]) >> 1
+		} else {
+			dts = pts
 		}
-
-	} else {
-		pts = es.PTS
-		dts = es.DTS
 	}
 	if pts != es.PTS && es.Buffer.CanRead() {
-		clone := *es
-		result = &clone
+		result = *es
 		// fmt.Println("clone", es.PTS, es.Buffer[4]&0x0f)
 		es.Buffer = nil
 	}
 	es.PTS = pts
 	es.DTS = dts
 	// fmt.Println("append", es.PTS, payload[pesHeaderDataLen+4]&0x0f)
-	es.Buffer = append(es.Buffer, payload[pesHeaderDataLen:]...)
+	es.Buffer.Write(payload[pesHeaderDataLen:])
+	// es.Buffer = append(es.Buffer, payload[pesHeaderDataLen:]...)
 	return
 }
