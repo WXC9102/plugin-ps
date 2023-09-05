@@ -97,7 +97,7 @@ loop:
 			payload, err = dec.ReadPayload()
 			if err == nil {
 				if frame, err = dec.video.parsePESPacket(payload); err == nil && frame.Buffer.Len() > 0 {
-					dec.ReceiveVideo(*frame)
+					dec.ReceiveVideo(frame)
 				}
 			}
 		case StartCodeAudio:
