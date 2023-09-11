@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/gobwas/ws v1.2.1
-	github.com/pion/rtp v1.7.13
+	github.com/pion/rtp v1.8.0
 	github.com/yapingcat/gomedia v0.0.0-20230426092936-387031404274
 	go.uber.org/zap v1.23.0
 	m7s.live/engine/v4 v4.13.3

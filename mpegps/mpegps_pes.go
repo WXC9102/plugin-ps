@@ -20,7 +20,7 @@ func (es *MpegPsEsStream) parsePESPacket(payload []byte) (result MpegPsEsStream,
 	}
 	payload = payload[3:]
 	extraData := payload[:pesHeaderDataLen]
-	var pts, dts uint32
+	pts, dts := es.PTS, es.DTS
 	if ptsFlag && len(extraData) > 4 {
 		pts = uint32(extraData[0]&0b0000_1110) << 29
 		pts |= uint32(extraData[1]) << 22
