@@ -103,6 +103,9 @@ func (c *PSConfig) ServeTCP(conn net.Conn) {
 		}
 		return
 	})
+    if err != nil {
+		PSPlugin.Error("main ServeTCP reader.Start err:", zap.Error(err), remoteAddr)
+	}
 	if puber != nil {
 		puber.Stop(zap.Error(err))
 		puber.Info("stop receive ps stream from", tcpAddr, remoteAddr)
