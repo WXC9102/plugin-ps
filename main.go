@@ -58,14 +58,16 @@ func (c *PSConfig) ServeTCP(conn net.Conn) {
 		Conn: conn,
 	}
 	tcpAddr := zap.String("tcp", conn.LocalAddr().String())
+    remoteAddr := zap.String("tcp", conn.RemoteAddr().String())
 	var puber *PSPublisher
 	var psStream *PSStream
 	var cache net.Buffers
 	err := reader.Start(func(data util.Buffer) (err error) {
+        PSPlugin.Debug("main ServeTCP RTP", remoteAddr)
 		if psStream == nil {
 			var rtpPacket rtp.Packet
 			if err = rtpPacket.Unmarshal(data); err != nil {
-				PSPlugin.Error("gb28181 decode rtp error:", zap.Error(err))
+				PSPlugin.Error("gb28181 decode rtp error:", zap.Error(err), remoteAddr)
 			}
 			ssrc := rtpPacket.SSRC
 			stream, loaded := conf.streams.LoadOrStore(ssrc, &PSStream{
@@ -74,6 +76,7 @@ func (c *PSConfig) ServeTCP(conn net.Conn) {
 			psStream = stream.(*PSStream)
 			if loaded {
 				if psStream.Conn != nil {
+                    PSPlugin.Error("gb28181 ssrc conflict, ", remoteAddr)
 					return fmt.Errorf("ssrc conflict")
 				}
 			}
@@ -82,14 +85,14 @@ func (c *PSConfig) ServeTCP(conn net.Conn) {
 		if puber == nil {
 			if psStream.PSPublisher != nil {
 				puber = psStream.PSPublisher
-				puber.Info("start receive ps stream from", tcpAddr)
+				puber.Info("start receive ps stream from", tcpAddr, remoteAddr)
 				for _, buf := range cache {
 					puber.PushPS(buf)
 				}
 				puber.PushPS(data)
 				return
 			} else {
-				//PSPlugin.Warn("publisher not found", zap.Uint32("ssrc", psStream.SSRC))
+				PSPlugin.Warn("publisher not found", zap.Uint32("ssrc", psStream.SSRC), remoteAddr)
 				cache = append(cache, append([]byte(nil), data...))
 				if time.Since(startTime) > time.Second*5 {
 					return fmt.Errorf("publisher not found")
@@ -102,7 +105,7 @@ func (c *PSConfig) ServeTCP(conn net.Conn) {
 	})
 	if puber != nil {
 		puber.Stop(zap.Error(err))
-		puber.Info("stop receive ps stream from", tcpAddr)
+		puber.Info("stop receive ps stream from", tcpAddr, remoteAddr)
 	}
 }
 

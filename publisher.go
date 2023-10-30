@@ -58,8 +58,9 @@ func (p *PSPublisher) ServeTCP(conn net.Conn) {
 	p.SetIO(conn)
 	defer p.Stop()
 	tcpAddr := zap.String("tcp", conn.LocalAddr().String())
-	p.Info("start receive ps stream from", tcpAddr)
-	defer p.Info("stop receive ps stream from", tcpAddr)
+    remoteAddr := zap.String("remote addr", conn.RemoteAddr().String())
+	p.Info("start receive ps stream from", tcpAddr, remoteAddr)
+	defer p.Info("stop receive ps stream from", tcpAddr, remoteAddr)
 	reader.Start(p.PushPS)
 }
 
@@ -81,6 +82,7 @@ func (p *PSPublisher) ServeUDP(conn *net.UDPConn) {
 }
 
 func (p *PSPublisher) PushPS(ps util.Buffer) (err error) {
+    p.Info("PSPublisher PushPS buffer")
 	if err = p.Unmarshal(ps); err != nil {
 		p.Error("gb28181 decode rtp error:", zap.Error(err))
 	} else if !p.IsClosed() {
