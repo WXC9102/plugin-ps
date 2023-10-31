@@ -18,24 +18,22 @@ func (t *TCPRTP) Start(onRTP func(util.Buffer) error) (err error) {
 	buffer := make(util.Buffer, 1024)
 	headBuf := make([]byte, 14)
 	var rtpVer uint8
-	var rtpPT uint8
 	var rtpSSRC uint32
 	for err == nil {
 		if _, err = io.ReadFull(reader, headBuf); err != nil {
 			return
 		}
-		curVer, curPT, curSSRC := getRTPHeadInfo(headBuf[2:])
+		curVer, _, curSSRC := getRTPHeadInfo(headBuf[2:])
 		if rtpSSRC == 0 {
 			rtpVer = curVer
-			rtpPT = curPT
 			rtpSSRC = curSSRC
 		} else {
-			for curVer != rtpVer || curPT != rtpPT || curSSRC != rtpSSRC {
+			for curVer != rtpVer || curSSRC != rtpSSRC {
 				copy(headBuf, headBuf[1:])
 				if _, err = io.ReadFull(reader, headBuf[11:]); err != nil {
 					return
 				}
-				curVer, curPT, curSSRC = getRTPHeadInfo(headBuf[2:])
+				curVer, _, curSSRC = getRTPHeadInfo(headBuf[2:])
 			}
 		}
 
