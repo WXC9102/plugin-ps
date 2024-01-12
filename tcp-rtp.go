@@ -14,8 +14,13 @@ type TCPRTP struct {
 }
 
 func (t *TCPRTP) Start(onRTP func(util.Buffer) error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// do nothing
+		}
+	}()
 	reader := bufio.NewReader(t.Conn)
-	buffer := make(util.Buffer, 1024)
+	buffer := make(util.Buffer, 2048)
 	headBuf := make([]byte, 14)
 	var rtpVer uint8
 	var rtpSSRC uint32
@@ -30,7 +35,7 @@ func (t *TCPRTP) Start(onRTP func(util.Buffer) error) (err error) {
 		} else {
 			for curVer != rtpVer || curSSRC != rtpSSRC {
 				copy(headBuf, headBuf[1:])
-				if _, err = io.ReadFull(reader, headBuf[11:]); err != nil {
+				if _, err = io.ReadFull(reader, headBuf[13:]); err != nil {
 					return
 				}
 				curVer, _, curSSRC = getRTPHeadInfo(headBuf[2:])
