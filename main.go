@@ -173,6 +173,46 @@ func (c *PSConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	suber.Stop(zap.Error(err))
 }
 
+func Listen(port string) error {
+	protocol, listenaddr, _ := strings.Cut(port, ":")
+	if !strings.Contains(listenaddr, ":") {
+		listenaddr = ":" + listenaddr
+	}
+
+	switch protocol {
+	case "tcp":
+		var tcpConf config.TCP
+		tcpConf.ListenAddr = listenaddr
+		if _, ok := conf.shareTCP.LoadOrStore(listenaddr, &tcpConf); ok {
+		} else {
+			go func() {
+				tcpConf.ListenTCP(PSPlugin, conf)
+				conf.shareTCP.Delete(listenaddr)
+			}()
+		}
+
+	case "udp":
+		var udpConf struct {
+			*net.UDPConn
+		}
+		if _, ok := conf.shareUDP.LoadOrStore(listenaddr, &udpConf); ok {
+		} else {
+			udpConn, err := util.ListenUDP(listenaddr, 1024*1024)
+			if err != nil {
+				PSPlugin.Error("udp listen error", zap.Error(err))
+				return err
+			}
+			udpConf.UDPConn = udpConn
+			go func() {
+				conf.ServeUDP(udpConn)
+				conf.shareUDP.Delete(listenaddr)
+			}()
+		}
+	}
+
+	return nil
+}
+
 func Receive(streamPath, dump, port string, ssrc uint32, reuse bool) (err error) {
 	if PSPlugin.Disabled {
 		return fmt.Errorf("ps plugin is disabled")
