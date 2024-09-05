@@ -47,6 +47,7 @@ func (p *PSPublisher) OnEvent(event any) {
 		}
 	case SEclose, SEKick:
 		conf.streams.Delete(p.Header.SSRC)
+		p.Info("ps stream close", zap.Uint32("ssrc", p.Header.SSRC))
 	}
 	p.Publisher.OnEvent(event)
 }

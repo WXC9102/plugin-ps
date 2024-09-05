@@ -234,6 +234,13 @@ func Receive(streamPath, dump, port string, ssrc uint32, reuse bool) (err error)
 			return
 		}
 	}
+
+	// Publish失败需要清理ssrc
+	defer func() {
+		if err != nil {
+			conf.streams.Delete(ssrc)
+		}
+	}()
 	if err = PSPlugin.Publish(streamPath, &pubber); err == nil {
 		psStream.PSPublisher = &pubber
 		protocol, listenaddr, _ := strings.Cut(port, ":")
